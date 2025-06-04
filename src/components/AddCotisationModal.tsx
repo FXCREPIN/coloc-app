@@ -4,28 +4,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { addTransaction, getMonthColocataires, isMonthClosed } from '@/utils/storage';
 import { Transaction, Colocataire } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Lock } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 
-interface AddTransactionModalProps {
+interface AddCotisationModalProps {
   isOpen: boolean;
   onClose: () => void;
   monthKey: string;
 }
 
-const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalProps) => {
+const AddCotisationModal = ({ isOpen, onClose, monthKey }: AddCotisationModalProps) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     colocataire: '',
-    date: '',
-    description: '',
-    montant: ''
+    montant: '',
+    deduitDesCourses: false
   });
+  const [defaultDate, setDefaultDate] = useState('');
   const [colocataires, setColocataires] = useState<Colocataire[]>([]);
   const isClosed = isMonthClosed(monthKey);
+
+  useEffect(() => {
+    setColocataires(getMonthColocataires(monthKey));
+  }, [monthKey]);
 
   useEffect(() => {
     if (monthKey) {
@@ -36,16 +40,9 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
         'Septembre': 8, 'Octobre': 9, 'Novembre': 10, 'Décembre': 11
       }[month];
       
-      const defaultDate = new Date(parseInt(year), monthIndex, 1);
-      setFormData(prev => ({
-        ...prev,
-        date: defaultDate.toISOString().split('T')[0]
-      }));
+      const date = new Date(parseInt(year), monthIndex, 1);
+      setDefaultDate(date.toISOString().split('T')[0]);
     }
-  }, [monthKey]);
-
-  useEffect(() => {
-    setColocataires(getMonthColocataires(monthKey));
   }, [monthKey]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -60,7 +57,7 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
       return;
     }
 
-    if (!formData.colocataire || !formData.description || !formData.montant) {
+    if (!formData.colocataire || !formData.montant) {
       toast({
         title: "Erreur",
         description: "Veuillez remplir tous les champs",
@@ -70,25 +67,24 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
     }
 
     const transaction = {
-      type: 'depense' as const,
+      type: 'cotisation' as const,
       colocataire: formData.colocataire,
-      date: formData.date,
-      description: formData.description,
+      date: defaultDate,
+      description: formData.deduitDesCourses ? 'Cotisation mensuelle (déduite des courses)' : 'Cotisation mensuelle',
       montant: parseFloat(formData.montant)
     };
 
     addTransaction(monthKey, transaction);
     
     toast({
-      title: "Dépense ajoutée",
-      description: `Dépense de ${formData.montant}€ ajoutée avec succès`,
+      title: "Cotisation ajoutée",
+      description: `Cotisation de ${formData.montant}€ ajoutée pour ${formData.colocataire}`,
     });
 
     setFormData({
       colocataire: '',
-      date: '',
-      description: '',
-      montant: ''
+      montant: '',
+      deduitDesCourses: false
     });
 
     onClose();
@@ -108,7 +104,6 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
           <div className="py-6">
             <p className="text-gray-500">
               Ce mois est clôturé et ne peut plus être modifié.
-              Les transactions sont verrouillées.
             </p>
           </div>
           <div className="flex justify-end">
@@ -123,7 +118,7 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Ajouter une dépense</DialogTitle>
+          <DialogTitle>Ajouter une cotisation</DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -149,28 +144,6 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
           </div>
 
           <div>
-            <Label htmlFor="date">Date</Label>
-            <Input
-              id="date"
-              type="date"
-              value={formData.date}
-              onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-              required
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Ex: Courses Carrefour, Facture électricité..."
-              required
-            />
-          </div>
-
-          <div>
             <Label htmlFor="montant">Montant (€)</Label>
             <Input
               id="montant"
@@ -182,6 +155,19 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
               placeholder="0.00"
               required
             />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="deduitDesCourses"
+              checked={formData.deduitDesCourses}
+              onCheckedChange={(checked) => 
+                setFormData(prev => ({ ...prev, deduitDesCourses: checked as boolean }))
+              }
+            />
+            <Label htmlFor="deduitDesCourses">
+              Somme déduite des courses effectuées
+            </Label>
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
@@ -198,4 +184,4 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
   );
 };
 
-export default AddTransactionModal;
+export default AddCotisationModal; 

@@ -1,4 +1,3 @@
-
 export interface Transaction {
   id: string;
   type: 'cotisation' | 'depense';
@@ -12,6 +11,10 @@ export interface MonthData {
   month: string;
   year: number;
   transactions: Transaction[];
+  isClosed?: boolean;
+  closedColocataires?: Colocataire[]; // Snapshot des colocataires au moment de la clôture
+  remarques?: string; // Champ pour les remarques du mois
+  isTransactionsVisible?: boolean; // État d'affichage des transactions
 }
 
 export interface ColocataireBalance {
@@ -26,4 +29,23 @@ export interface MonthSummary {
   totalDepenses: number;
   soldeGlobal: number;
   balances: ColocataireBalance[];
+}
+
+export type ColocataireType = 'accueilli' | 'volontaire';
+export type RemboursementRule = 'egal' | 'egal-accueillis' | 'priorisation';
+
+export interface Colocataire {
+  id: string;
+  nom: string;
+  cotisationMensuelle: number;
+  dateAjout: string;
+  type: ColocataireType;
+  creditManuel: number;
+  responsableCourses: boolean;
+  prioriteRemboursement?: number; // 1 = plus prioritaire
+}
+
+export interface RemboursementSettings {
+  regle: RemboursementRule;
+  budgetInitial?: number;
 }

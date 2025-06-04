@@ -5,48 +5,55 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { addTransaction, getMonthColocataires, isMonthClosed } from '@/utils/storage';
+import { updateTransaction, deleteTransaction, getMonthColocataires, isMonthClosed } from '@/utils/storage';
 import { Transaction, Colocataire } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { Lock } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Trash2, Lock } from 'lucide-react';
 
-interface AddTransactionModalProps {
+interface EditTransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
   monthKey: string;
+  transaction: Transaction;
 }
 
-const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalProps) => {
+const EditTransactionModal = ({ isOpen, onClose, monthKey, transaction }: EditTransactionModalProps) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
-    colocataire: '',
-    date: '',
-    description: '',
-    montant: ''
+    type: transaction.type,
+    colocataire: transaction.colocataire,
+    date: transaction.date,
+    description: transaction.description,
+    montant: transaction.montant.toString()
   });
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [colocataires, setColocataires] = useState<Colocataire[]>([]);
   const isClosed = isMonthClosed(monthKey);
 
   useEffect(() => {
-    if (monthKey) {
-      const [month, year] = monthKey.split('-');
-      const monthIndex = {
-        'Janvier': 0, 'Février': 1, 'Mars': 2, 'Avril': 3,
-        'Mai': 4, 'Juin': 5, 'Juillet': 6, 'Août': 7,
-        'Septembre': 8, 'Octobre': 9, 'Novembre': 10, 'Décembre': 11
-      }[month];
-      
-      const defaultDate = new Date(parseInt(year), monthIndex, 1);
-      setFormData(prev => ({
-        ...prev,
-        date: defaultDate.toISOString().split('T')[0]
-      }));
-    }
+    setColocataires(getMonthColocataires(monthKey));
   }, [monthKey]);
 
   useEffect(() => {
-    setColocataires(getMonthColocataires(monthKey));
-  }, [monthKey]);
+    setFormData({
+      type: transaction.type,
+      colocataire: transaction.colocataire,
+      date: transaction.date,
+      description: transaction.description,
+      montant: transaction.montant.toString()
+    });
+  }, [transaction]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,26 +76,41 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
       return;
     }
 
-    const transaction = {
-      type: 'depense' as const,
+    const updatedTransaction: Transaction = {
+      ...transaction,
+      type: formData.type,
       colocataire: formData.colocataire,
       date: formData.date,
       description: formData.description,
       montant: parseFloat(formData.montant)
     };
 
-    addTransaction(monthKey, transaction);
+    updateTransaction(monthKey, updatedTransaction);
     
     toast({
-      title: "Dépense ajoutée",
-      description: `Dépense de ${formData.montant}€ ajoutée avec succès`,
+      title: "Transaction modifiée",
+      description: `${formData.type === 'cotisation' ? 'Cotisation' : 'Dépense'} de ${formData.montant}€ modifiée avec succès`,
     });
 
-    setFormData({
-      colocataire: '',
-      date: '',
-      description: '',
-      montant: ''
+    onClose();
+    window.location.reload();
+  };
+
+  const handleDelete = () => {
+    if (isClosed) {
+      toast({
+        title: "Action impossible",
+        description: "Ce mois est clôturé et ne peut plus être modifié.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    deleteTransaction(monthKey, transaction.id);
+    
+    toast({
+      title: "Transaction supprimée",
+      description: `${transaction.type === 'cotisation' ? 'Cotisation' : 'Dépense'} de ${transaction.montant}€ supprimée avec succès`,
     });
 
     onClose();
@@ -123,10 +145,28 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Ajouter une dépense</DialogTitle>
+          <DialogTitle>Modifier la transaction</DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="type">Type</Label>
+            <Select 
+              value={formData.type} 
+              onValueChange={(value: 'cotisation' | 'depense') => 
+                setFormData(prev => ({ ...prev, type: value }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cotisation">Cotisation</SelectItem>
+                <SelectItem value="depense">Dépense</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div>
             <Label htmlFor="colocataire">Colocataire</Label>
             <Select 
@@ -184,12 +224,40 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex gap-3 pt-4">
             <Button type="button" variant="outline" onClick={onClose}>
               Annuler
             </Button>
+            
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" variant="destructive" className="flex items-center gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Supprimer
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Cette action supprimera définitivement la transaction.
+                    Cette action est irréversible.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Annuler</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDelete}
+                    className="bg-red-500 hover:bg-red-600"
+                  >
+                    Supprimer
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
             <Button type="submit" className="bg-gradient-to-r from-blue-500 to-purple-500">
-              Ajouter
+              Enregistrer
             </Button>
           </div>
         </form>
@@ -198,4 +266,4 @@ const AddTransactionModal = ({ isOpen, onClose, monthKey }: AddTransactionModalP
   );
 };
 
-export default AddTransactionModal;
+export default EditTransactionModal; 
